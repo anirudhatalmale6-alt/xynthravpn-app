@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/server_model.dart';
+import '../services/vpn_service.dart';
 
 enum ConnectionState { disconnected, connecting, connected, disconnecting }
 
@@ -10,27 +12,29 @@ class VpnProvider extends ChangeNotifier {
   final List<VpnServer> _servers = VpnServer.defaultServers;
   DateTime? _connectedSince;
   Timer? _statsTimer;
+  Timer? _durationTimer;
+  String? _connectionError;
 
-  // Simulated traffic stats
-  double _dataUp = 0;
-  double _dataDown = 0;
+  int _rxBytes = 0;
+  int _txBytes = 0;
 
-  // Settings
   bool _autoConnect = false;
   bool _killSwitch = false;
 
   VpnProvider() {
     _selectedServer = _servers.first;
+    _measurePings();
   }
 
   ConnectionState get connectionState => _connectionState;
   VpnServer? get selectedServer => _selectedServer;
   List<VpnServer> get servers => _servers;
   DateTime? get connectedSince => _connectedSince;
-  double get dataUp => _dataUp;
-  double get dataDown => _dataDown;
+  int get rxBytes => _rxBytes;
+  int get txBytes => _txBytes;
   bool get autoConnect => _autoConnect;
   bool get killSwitch => _killSwitch;
+  String? get connectionError => _connectionError;
 
   bool get isConnected => _connectionState == ConnectionState.connected;
   bool get isConnecting => _connectionState == ConnectionState.connecting;
@@ -45,14 +49,16 @@ class VpnProvider extends ChangeNotifier {
     return '$hours:$minutes:$seconds';
   }
 
-  String get formattedDataUp {
-    if (_dataUp < 1024) return '${_dataUp.toStringAsFixed(1)} KB';
-    return '${(_dataUp / 1024).toStringAsFixed(1)} MB';
-  }
+  String get formattedDataUp => _formatBytes(_txBytes);
+  String get formattedDataDown => _formatBytes(_rxBytes);
 
-  String get formattedDataDown {
-    if (_dataDown < 1024) return '${_dataDown.toStringAsFixed(1)} KB';
-    return '${(_dataDown / 1024).toStringAsFixed(1)} MB';
+  String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
   void selectServer(VpnServer server) {
@@ -81,21 +87,29 @@ class VpnProvider extends ChangeNotifier {
   Future<void> connect() async {
     if (_selectedServer == null) return;
 
+    _connectionError = null;
     _connectionState = ConnectionState.connecting;
     notifyListeners();
 
-    // Simulate connection delay (1.5-3 seconds)
-    await Future.delayed(const Duration(milliseconds: 2000));
+    try {
+      final success = await NativeVpnService.connect(_selectedServer!.wgConfig);
 
-    // TODO: Replace with real WireGuard tunnel setup
-    // This is where wireguard_flutter or native channel code would go:
-    // await WireGuardFlutter.connect(config: serverConfig);
+      if (success) {
+        _connectionState = ConnectionState.connected;
+        _connectedSince = DateTime.now();
+        _rxBytes = 0;
+        _txBytes = 0;
+        _startStatsPolling();
+        _startDurationTimer();
+      } else {
+        _connectionError = 'VPN permission denied';
+        _connectionState = ConnectionState.disconnected;
+      }
+    } catch (e) {
+      _connectionError = e.toString();
+      _connectionState = ConnectionState.disconnected;
+    }
 
-    _connectionState = ConnectionState.connected;
-    _connectedSince = DateTime.now();
-    _dataUp = 0;
-    _dataDown = 0;
-    _startStatsSimulation();
     notifyListeners();
   }
 
@@ -103,35 +117,83 @@ class VpnProvider extends ChangeNotifier {
     _connectionState = ConnectionState.disconnecting;
     notifyListeners();
 
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    // TODO: Replace with real WireGuard tunnel teardown
-    // await WireGuardFlutter.disconnect();
+    try {
+      await NativeVpnService.disconnect();
+    } catch (e) {
+      debugPrint('Disconnect error: $e');
+    }
 
     _connectionState = ConnectionState.disconnected;
     _connectedSince = null;
-    _stopStatsSimulation();
+    _stopStatsPolling();
+    _stopDurationTimer();
     notifyListeners();
   }
 
-  void _startStatsSimulation() {
+  void _startStatsPolling() {
     _statsTimer?.cancel();
-    _statsTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // Simulate realistic-looking traffic
-      _dataUp += 2.5 + (timer.tick % 5) * 1.2;
-      _dataDown += 8.3 + (timer.tick % 7) * 3.1;
+    _statsTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final stats = await NativeVpnService.getStats();
+        if (stats.isNotEmpty) {
+          _rxBytes = stats['rx'] ?? _rxBytes;
+          _txBytes = stats['tx'] ?? _txBytes;
+          notifyListeners();
+        }
+      } catch (e) {
+        debugPrint('Stats poll error: $e');
+      }
+    });
+  }
+
+  void _stopStatsPolling() {
+    _statsTimer?.cancel();
+    _statsTimer = null;
+  }
+
+  void _startDurationTimer() {
+    _durationTimer?.cancel();
+    _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       notifyListeners();
     });
   }
 
-  void _stopStatsSimulation() {
-    _statsTimer?.cancel();
-    _statsTimer = null;
+  void _stopDurationTimer() {
+    _durationTimer?.cancel();
+    _durationTimer = null;
+  }
+
+  Future<void> _measurePings() async {
+    for (final server in _servers) {
+      try {
+        final stopwatch = Stopwatch()..start();
+        final socket = await Socket.connect(
+          server.ipAddress,
+          51820,
+          timeout: const Duration(seconds: 3),
+        );
+        stopwatch.stop();
+        socket.destroy();
+        server.ping = stopwatch.elapsedMilliseconds;
+        server.signalStrength = server.ping < 30 ? 3 : (server.ping < 80 ? 2 : 1);
+      } catch (e) {
+        server.ping = 999;
+        server.signalStrength = 0;
+      }
+    }
+    _servers.sort((a, b) => a.ping.compareTo(b.ping));
+    _selectedServer = _servers.first;
+    notifyListeners();
+  }
+
+  Future<void> refreshPings() async {
+    await _measurePings();
   }
 
   @override
   void dispose() {
     _statsTimer?.cancel();
+    _durationTimer?.cancel();
     super.dispose();
   }
 }

@@ -236,12 +236,26 @@ class _HomeScreenState extends State<HomeScreen>
                               fontFeatures: [FontFeature.tabularFigures()],
                             ),
                           ),
-                        if (!vpnProvider.isConnected)
+                        if (!vpnProvider.isConnected && vpnProvider.connectionError == null)
                           const Text(
                             'Tap to connect',
                             style: TextStyle(
                               fontSize: 14,
                               color: XynthraColors.textMuted,
+                            ),
+                          ),
+                        if (vpnProvider.connectionError != null && vpnProvider.isDisconnected)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 40),
+                            child: Text(
+                              vpnProvider.connectionError!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: XynthraColors.error,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         const SizedBox(height: 32),

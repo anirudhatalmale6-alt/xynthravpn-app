@@ -140,11 +140,20 @@ class ServerListScreen extends StatelessWidget {
                           ),
                         ),
                         const Spacer(),
-                        Text(
-                          '${vpnProvider.servers.length} servers',
-                          style: const TextStyle(
-                            color: XynthraColors.textMuted,
-                            fontSize: 13,
+                        GestureDetector(
+                          onTap: () => vpnProvider.refreshPings(),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.refresh_rounded, color: XynthraColors.textMuted, size: 16),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${vpnProvider.servers.length} servers',
+                                style: const TextStyle(
+                                  color: XynthraColors.textMuted,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],

@@ -127,7 +127,7 @@ class SettingsScreen extends StatelessWidget {
                           _buildInfoTile(
                             icon: Icons.info_outline_rounded,
                             title: 'Version',
-                            subtitle: '1.0.0 (Build 1)',
+                            subtitle: '1.1.0 (Build 2)',
                           ),
                           _buildDivider(),
                           _buildInfoTile(
