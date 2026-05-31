@@ -1,0 +1,1 @@
+/var/lib/freelancer/projects/40282401/xynthravpn-app/build/app/intermediates/cxx/RelWithDebInfo/226x596u/obj/x86

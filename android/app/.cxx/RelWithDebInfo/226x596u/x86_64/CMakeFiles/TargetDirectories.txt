@@ -1,0 +1,2 @@
+/var/lib/freelancer/projects/40282401/xynthravpn-app/android/app/.cxx/RelWithDebInfo/226x596u/x86_64/CMakeFiles/edit_cache.dir
+/var/lib/freelancer/projects/40282401/xynthravpn-app/android/app/.cxx/RelWithDebInfo/226x596u/x86_64/CMakeFiles/rebuild_cache.dir
