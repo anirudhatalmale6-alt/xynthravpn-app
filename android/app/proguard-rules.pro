@@ -1,0 +1,4 @@
+-keep class com.wireguard.** { *; }
+-keep class com.xynthra.xynthravpn.** { *; }
+-dontwarn javax.annotation.**
+-dontwarn javax.annotation.meta.**
