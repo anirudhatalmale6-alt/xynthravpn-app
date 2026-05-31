@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 class NativeVpnService {
-  static const _channel = MethodChannel('com.xynthra.xynthravpn/vpn');
+  static const _channel = MethodChannel('com.xynthravpn/vpn');
 
   static Future<bool> connect(String config) async {
     try {

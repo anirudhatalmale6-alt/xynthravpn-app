@@ -1,4 +1,4 @@
-package com.xynthra.xynthravpn
+package com.xynthravpn
 
 import android.app.Activity
 import android.content.Intent
@@ -17,7 +17,7 @@ import java.io.StringReader
 class MainActivity : FlutterActivity() {
 
     companion object {
-        const val CHANNEL = "com.xynthra.xynthravpn/vpn"
+        const val CHANNEL = "com.xynthravpn/vpn"
         const val TAG = "XynthraVPN"
         const val VPN_PREPARE_REQUEST = 10001
     }
